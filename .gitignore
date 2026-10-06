@@ -19,6 +19,9 @@
 /.next/
 /out/
 
+# cli build
+/dist/
+
 # production
 /build
 

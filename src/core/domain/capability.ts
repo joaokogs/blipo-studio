@@ -1,9 +1,9 @@
 import type { ResourceKind, Scope } from "./resource";
 
-export type Operation = "create" | "read" | "update" | "delete";
+export type Operation = "list" | "create" | "read" | "update" | "delete";
 export type CapabilityStatus = "planned" | "verified";
 
-export const OPERATIONS: readonly Operation[] = ["create", "read", "update", "delete"];
+export const OPERATIONS: readonly Operation[] = ["list", "create", "read", "update", "delete"];
 
 export interface Capability {
   readonly resourceKind: ResourceKind;

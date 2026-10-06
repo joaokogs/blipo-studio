@@ -1,29 +1,54 @@
 {
   "name": "blipo-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "description": "Blipo Studio — gestão local-first de agentes, subagentes e skills do OpenCode a partir de arquivos-fonte.",
+  "bin": {
+    "blipo": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    ".next/standalone/",
+    "docs/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build:web": "next build",
+    "build:assets": "node scripts/copy-standalone-assets.mjs",
+    "build:cli": "tsup",
+    "build": "npm run build:web && npm run build:assets && npm run build:cli",
     "start": "next start",
+    "studio": "node dist/cli.js start",
+    "dev:studio": "npm run build && node dist/cli.js start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "next": "16.3.8",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "commander": "^15.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
+    "tsup": "^8.5.1",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

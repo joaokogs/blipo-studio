@@ -1,0 +1,15 @@
+node_modules/
+src/
+tests/
+scripts/
+.maestri/
+.next/
+!.next/standalone/
+*.tsbuildinfo
+next-env.d.ts
+eslint.config.mjs
+postcss.config.mjs
+tsconfig.json
+vitest.config.ts
+tsup.config.ts
+playwright.config.ts

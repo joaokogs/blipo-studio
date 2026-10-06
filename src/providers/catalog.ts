@@ -1,3 +1,4 @@
+import { openCodeAdapter } from "@/providers/opencode/adapter";
 import type { ProviderDescriptor } from "@/core/domain";
 import type { ProviderCatalog } from "@/core/ports";
 
@@ -5,8 +6,8 @@ const providers: readonly ProviderDescriptor[] = [
   {
     id: "opencode",
     name: "OpenCode",
-    implementationStatus: "planned",
-    capabilities: [],
+    implementationStatus: "implemented",
+    capabilities: openCodeAdapter.capabilities(),
   },
   {
     id: "codex",

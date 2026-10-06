@@ -1,0 +1,6 @@
+---
+name: git-release
+description: Script auxiliar preservado na remoção
+---
+
+Conteúdo auxiliar.

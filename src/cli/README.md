@@ -1,34 +1,25 @@
 # CLI
 
-Esta pasta abrigará, no futuro, a interface de linha de comando do Blipo Studio.
+A CLI `blipo` é uma casca fina sobre o servidor Next `standalone`. Ela **não executa agentes**.
 
-## Limites atuais
+## Comandos
 
-- Não existe CLI operacional nesta versão e nenhum binário deve ser exposto.
-- O comando `blipo start` é um objetivo futuro, não algo disponível agora.
-- Nada de pacote npm público, build `standalone` ou assets estáticos é produzido aqui ainda.
+```bash
+blipo start [--port N] [--no-open] [--session-file PATH] [--global-config-dir PATH] [--backup-dir PATH]
+```
 
-## Direção prevista
+## Responsabilidades
 
-- A CLI deve ser uma casca fina sobre `src/core/application`, sem regra de negócio própria.
-- Toda escrita deve passar pelas mesmas portas de núcleo usadas pela futura API.
+- Fixar o **workspace** no `cwd` do processo (nunca um caminho vindo do navegador).
+- Resolver a raiz global (`--global-config-dir` / `OPENCODE_CONFIG_DIR` / `~/.config/opencode`).
+- Gerar o token da sessão (32 bytes) e exportá-lo ao servidor por variáveis `BLIPO_*`.
+- Subir o Next `standalone` em `127.0.0.1` e, por padrão, abrir o navegador com o token no
+  fragmento.
+- `--session-file PATH`: grava um handoff JSON (origem, URL de bootstrap, token) em arquivo
+  exclusivo (`wx`, 0600), valida ancestrais contra symlink, não imprime o token e remove o arquivo
+  no shutdown.
+- `--no-open` sem handoff roda em modo headless (não abre navegador e não imprime token).
+- Encerrar o filho em `SIGINT`/`SIGTERM` e em falha de readiness/abertura, limpando o handoff.
 
-## Fluxo futuro do `blipo start` (não implementado)
-
-1. `blipo start` captura o **cwd** do repositório;
-2. sobe um **servidor Next de produção** em **loopback**;
-3. abre o **browser**;
-4. o browser fala com a **API** Next;
-5. a API chama `application`;
-6. a aplicação usa um **adapter de provider** (planeja mudanças, sem tocar o disco) e um
-   **adapter de filesystem** (faz o I/O real) através do `FileStore`.
-
-Precisões:
-
-- O **diretório de instalação não é o workspace**. O workspace é **fixado pelo processo** no
-  `blipo start`, nunca um caminho arbitrário enviado pelo browser.
-- O pacote npm futuro empacota o Next `standalone`, a CLI e os assets estáticos (`public/`).
-- A validação exige um **protótipo com `npm pack` instalado fora do checkout**.
-- Não prometer **atomicidade de múltiplos arquivos**; a garantia é por arquivo.
-
-Não adicione comandos falsos ou stubs que sugiram funcionalidade inexistente.
+O diretório de instalação é resolvido a partir do `dist/cli.js`; nenhum @-file é resolvido pelo
+`cwd`.

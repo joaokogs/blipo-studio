@@ -1,14 +1,56 @@
-import type { Operation, ProviderId, Resource } from "@/core/domain";
+import type {
+  AgentMode,
+  Capability,
+  Diagnostic,
+  Operation,
+  ProviderId,
+  ResourceKind,
+  Scope,
+} from "@/core/domain";
 import type { FileChangePlan } from "./file-store";
 
+export interface ResourceRef {
+  readonly provider: ProviderId;
+  readonly scope: Scope;
+  readonly kind: ResourceKind;
+  readonly name: string;
+}
+
+export interface ValidationInput {
+  readonly scope: Scope;
+  readonly kind: ResourceKind;
+  readonly name: string;
+  readonly content: string;
+}
+
+export interface ValidationResult {
+  readonly ok: boolean;
+  readonly diagnostics: readonly Diagnostic[];
+  readonly mode?: AgentMode;
+  readonly description?: string;
+}
+
+export interface ParsedFrontmatter {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly data?: Record<string, unknown>;
+  readonly mode?: AgentMode;
+  readonly description?: string;
+}
+
 export interface ResourceChangeRequest {
-  readonly resource: Resource;
   readonly operation: Operation;
+  readonly scope: Scope;
+  readonly kind: ResourceKind;
+  readonly name: string;
+  readonly mode?: AgentMode;
   readonly content?: string;
   readonly expectedVersion?: string;
 }
 
 export interface ProviderAdapter {
   readonly providerId: ProviderId;
-  planChanges(request: ResourceChangeRequest): Promise<FileChangePlan>;
+  capabilities(): readonly Capability[];
+  parse(content: string, kind: ResourceKind): ParsedFrontmatter;
+  validate(input: ValidationInput): ValidationResult;
+  planChanges(request: ResourceChangeRequest): FileChangePlan;
 }

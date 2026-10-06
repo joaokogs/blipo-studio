@@ -1,23 +1,17 @@
 # Infraestrutura
 
-Esta pasta reunirá os adaptadores concretos das portas definidas em `src/core/ports`.
+Adaptadores concretos das portas em `src/core/ports`.
 
-## Limites atuais
+## Conteúdo
 
-- Nada de I/O real de disco ou rede é implementado nesta versão.
-- `FileStore` e `ProviderAdapter` são apenas contratos no núcleo; não há implementação de
-  produção aqui ainda.
+- `fs/fs-file-store.ts`: implementação segura do `FileStore` (list/read/create/update/delete).
+- `fs/security.ts`: validação de symlink/junction e contenção por `realpath`.
+- `fs/backup.ts`: backups obrigatórios, com manifesto e sem expiração.
+- `fs/mutex.ts`: serialização por alvo dentro do processo.
+- `session.ts`: leitura da sessão das variáveis `BLIPO_*` (server-only).
 
-## Direção de dependência
+## Garantias
 
-`Next API (futura) -> application -> portas -> adaptador -> FileStore seguro`
-
-Quando a implementação começar, todo acesso a arquivos deve passar por um `FileStore` seguro,
-responsável por:
-
-- restringir alvos lógicos a escopos `global` ou `repository`;
-- bloquear traversal e symlinks que escapem do escopo;
-- validar `expectedVersion` em `update`/`delete` para detectar conflitos;
-- aplicar alterações de forma atômica.
-
-Não criar adaptadores "de mentira" que finjam executar mudanças.
+- Alvos lógicos escopados; rejeita traversal, `\`, drive/ADS, nomes reservados e links.
+- Leitura limitada a 1 MiB; versão por SHA-256.
+- Escrita atômica **por arquivo**; sem transação multiarquivo e sem lock entre aplicações.

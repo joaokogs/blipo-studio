@@ -3,112 +3,95 @@
 ## Visão geral
 
 O Blipo Studio é um **monólito modular local-first**. O núcleo concentra domínio e casos de uso;
-a interface (Next) e as futuras integrações (CLI, adaptadores de I/O) ficam nas bordas.
+Next, CLI e adaptadores de I/O ficam nas bordas. O provider OpenCode está implementado; a leitura e
+escrita são mediadas por um `FileStore` seguro.
 
 ## Camadas
 
 | Camada | Caminho | Responsabilidade |
 | --- | --- | --- |
-| Domínio | `src/core/domain` | Tipos puros: `ResourceKind`, `Scope`, `ProviderId`, `Resource`, `Capability`, `ProviderDescriptor` e o helper `canPerform`. |
-| Portas | `src/core/ports` | Contratos: `ProviderCatalog`, `ProviderAdapter`, `FileStore`. |
-| Aplicação | `src/core/application` | Casos de uso, como `listProviders`. |
-| Providers | `src/providers` | Catálogo com os providers planejados. |
-| Features | `src/features` | Componentes informativos de interface. |
-| App | `src/app` | Landing page (Next App Router). |
-| Infraestrutura | `src/infrastructure` | Futuro: adaptadores concretos das portas. |
-| CLI | `src/cli` | Futuro: interface de linha de comando. |
+| Domínio | `src/core/domain` | Tipos puros: `Resource`, `Capability`, `Operation` (inclui `list`), `ProviderDescriptor`, validação de nome, `Diagnostic` e erros (`StudioError`). |
+| Portas | `src/core/ports` | Contratos: `ProviderCatalog`, `ProviderAdapter` (planeja + valida), `FileStore` (list/read/apply). |
+| Aplicação | `src/core/application` | Casos de uso: `listProviders`, `listResources`, `readResource`, `validateResource`, `createResource`, `updateResource`, `deleteResource`. |
+| Providers | `src/providers` | Catálogo e `openCodeAdapter` (frontmatter YAML, templates, capabilities). |
+| Features | `src/features/studio` | UI funcional (listar, criar, ler, validar, salvar, remover, diff, conflitos). |
+| App / API | `src/app` | Next App Router + rotas `/api/session` e `/api/resources/*`. |
+| Infraestrutura | `src/infrastructure` | `FsFileStore` seguro, backup, mutex por alvo e sessão lida de env. |
+| CLI | `src/cli` | `blipo start`: fixa o workspace, gera a sessão e sobe o Next `standalone`. |
 
 ## Direção de dependências
 
 ```
-app (Next) ──┐
-futura CLI ──┼──▶ application ──▶ ports ◀── adapters (infrastructure)
-             │
-             └──▶ domain  ◀── usado por todas as camadas (não depende de ninguém)
+app (Next) / CLI ──▶ application ──▶ ports ◀── adapters (infrastructure, providers)
+                                  └──▶ domain ◀── usado por todas (não depende de ninguém)
 ```
 
-- O **domínio** não importa Next, disco, rede, portas nem adaptadores; as demais camadas é que
-  dependem dele.
-- A **aplicação** depende de domínio e portas.
-- Os **adaptadores** implementam as portas; são a única camada autorizada a fazer I/O.
-- A futura **API Next** é transporte: recebe requisição, chama `application`, devolve resposta.
+- O **domínio** não importa Next, disco nem rede.
+- Os **adaptadores** são a única camada com I/O.
+- A **API** é transporte: valida Zod, autentica e delega para `application`; não duplica regras.
 
-### Tipos de adaptador
+## Modelo de recursos (OpenCode)
 
-- **Adapter de provider** (ex.: OpenCode, Codex, Claude Code): traduz um pedido de mudança em um
-  `FileChangePlan`, **sem tocar o disco**.
-- **Adapter de filesystem** (futuro `FileStore`): recebe o plano e é quem faz o I/O real, de
-  forma segura.
+- `agent` e `subagent` compartilham o armazenamento `agents/<nome>.md`. A distinção é o frontmatter
+  `mode`: `primary` -> agente, `subagent` -> subagente, `all`/ausente -> agente (modo `all`
+  mostrado e preservado).
+- `skill` usa `skills/<nome>/SKILL.md`. O `name` do frontmatter deve ser igual ao nome da pasta e
+  seguir `^[a-z0-9]+(-[a-z0-9]+)*$` (1–64). `description` é obrigatória (1–1024).
+- O campo `description` de agentes é obrigatório. Campos conhecidos têm tipos relevantes
+  validados; campos desconhecidos são preservados (com aviso) e o arquivo **nunca é
+  reserializado**.
 
-## Contratos principais
+## ProviderAdapter x FileStore
 
-- `ProviderCatalog.listProviders()`: fonte dos `ProviderDescriptor`.
-- `ProviderAdapter.planChanges()`: **planeja** alterações sem I/O direto.
-- `FileStore`:
-  - `read` retorna `content` + `version`;
-  - `apply` recebe um plano com operações discriminadas `create` / `update` / `delete`;
-  - o alvo é **lógico e escopado** (`scope` + `path`), nunca um caminho absoluto;
-  - `expectedVersion` é **exigido** em `update` e `delete` e **ausente** em `create`.
+- `ProviderAdapter` planeja mudanças **sem tocar o disco** e valida conteúdo/frontmatter.
+- `FileStore` concentra o I/O. `apply` aceita **um** plano com **uma** operação (`create`,
+  `update` ou `delete`), sempre com alvo lógico `{ scope, storage, name }`.
 
-## Regra de capability
+### Regras do FileStore
 
-`canPerform` só retorna `true` quando o provider está `implemented` e existe capability com
-status `verified` para a combinação de recurso, escopo e operação. Um provider `planned`
-permanece desabilitado mesmo que exista capability `verified`.
+- Escopos fixos: repositório (`<workspace>/.opencode`) e global (`<globalRoot>`).
+- Nomes validados no domínio e novamente no adaptador (defesa em profundidade).
+- Rejeita traversal, `\`, drive/ADS, nomes reservados do Windows e symlink/junction em qualquer
+  ancestral existente (`lstat` + contenção por `realpath`).
+- `create` usa `wx` (exclusivo); `update` grava em temporário no mesmo diretório (`wx` 0600),
+  preserva modo e faz `rename`; `delete` remove apenas o arquivo-alvo.
+- `expectedVersion` (SHA-256) é obrigatório em `update`/`delete` e reconferido após o backup e
+  imediatamente antes de `rename`/`unlink`.
+- Serialização por alvo via mutex em processo. **Sem** lock entre aplicações e **sem CAS**:
+  garantimos atomicidade **por arquivo** (`rename`), não compare-and-swap. Um editor externo pode
+  alterar o arquivo entre a última checagem e a gravação (TOCTOU residual documentado).
+- `list` trunca por escopo em 200 arquivos / 16 MiB / 1000 entradas e reporta `list_truncated`,
+  em vez de retornar uma listagem incompleta silenciosamente.
 
-O catálogo atual declara os três providers como `planned` e com `capabilities` **vazias**, pois
-a matriz de suporte ainda não foi validada — combinações não devem ser inventadas.
+## Backups
 
-## Limites e não-objetivos atuais
+Antes de `update`/`delete`, o conteúdo atual é copiado para um diretório de backup com
+`manifest.json`. Backups não expiram. Falha de backup aborta a operação sem alterar o original.
+O diretório é resolvido por `--backup-dir`, `%LOCALAPPDATA%`, `$XDG_DATA_HOME` ou
+`~/.local/share`.
 
-- Não há CRUD, endpoints de disco nem CLI operacional.
-- `src/infrastructure`, `src/cli`, `src/components/ui` e `tests/fixtures` contêm apenas
-  documentação de limites futuros.
-- Arquivos fonte são a fonte da verdade; não há banco de dados nem execução de agentes.
-- `blipo start` e a CLI standalone são objetivos futuros.
+## API e sessão
 
-## Fluxo futuro do `blipo start`
+- A sessão é criada pela CLI e passada ao servidor por variáveis `BLIPO_*` (server-only). Sem
+  sessão, tudo é 401 (fail-closed).
+- Todas as rotas exigem token (`x-blipo-token`, `timingSafeEqual`), `Host` exato
+  (`127.0.0.1:<porta>`) e, quando presente, `Origin` exato; mutações exigem `Origin`.
+- Corpo limitado a 1 MiB (contagem por stream, cobre `chunked`).
+- `/api/session` devolve workspace, diretório de backup, escopos, providers e capabilities — nunca
+  o token.
 
-Objetivo futuro, **não implementado**:
+## Empacotamento
 
-1. `blipo start` captura o **cwd** do repositório.
-2. sobe um **servidor Next de produção** em **loopback**;
-3. abre o **browser**;
-4. o browser fala com a **API** Next;
-5. a API chama `application`;
-6. a aplicação usa um **adapter de provider** (planeja, sem disco) e um **adapter de
-   filesystem** (faz o I/O) via `FileStore`.
+- `next build` com `output: "standalone"`; assets copiados para `.next/standalone` via script Node
+  portátil (sem shell string).
+- `dist/cli.js` gerado por tsup (CJS, bundled).
+- `package.json#files` inclui `dist`, `.next/standalone`, `docs` e `README.md`. Pacote **privado**:
+  `npm pack` funciona, `publish` permanece bloqueado.
 
-Regras do pacote futuro:
+## Limites atuais e não-objetivos
 
-- o **diretório de instalação não é o workspace**; o workspace é **fixado pelo processo** no
-  `blipo start`, nunca um caminho arbitrário vindo do browser;
-- será um **pacote npm** com o build `standalone` do Next, a CLI e os assets estáticos
-  (`.next/static/` e `public/`), resolvidos a partir da instalação;
-- exige um **protótipo validado com `npm pack`**, instalado **fora do checkout** — ainda não
-  implementado.
-
-## Limites de I/O
-
-- Não prometer **atomicidade de múltiplos arquivos**; a escrita atômica por arquivo é um
-  requisito futuro que precisa ser validado nas plataformas suportadas.
-- Sem confirmação da especificação de segurança, nenhum adaptador de filesystem deve ser criado.
-
-## Segurança antes do I/O real
-
-Qualquer implementação de `FileStore`/adaptador precisa tratar, na ordem:
-
-1. binding em loopback;
-2. validação de `Origin` e `Host`;
-3. token local e proteção CSRF;
-4. prevenção de path traversal;
-5. bloqueio de symlinks que escapem do escopo;
-6. escrita atômica **por arquivo** (sem prometer atomicidade de múltiplos arquivos);
-7. detecção de conflitos via `expectedVersion`.
-
-## Stack
-
-**Atual:** Next.js 16, React 19, TypeScript `strict`, Tailwind CSS 4, Vitest, npm.
-
-**Recomendada:** manter o núcleo livre de framework, adicionar adaptadores de I/O somente após
-fechar o desenho de segurança, e expor a API Next como casca fina sobre a aplicação.
+- Apenas OpenCode implementado; Codex/Claude Code planejados com capabilities vazias.
+- Fora do MVP: config inline JSON/JSONC, diretórios singulares legados, `.claude`/`.agents` e
+  subdiretórios de agentes.
+- Sem banco de dados, sem execução de agentes, sem transação multiarquivo.
+- Validado apenas em Windows.
