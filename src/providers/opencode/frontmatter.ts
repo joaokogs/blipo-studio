@@ -23,6 +23,7 @@ export interface ParsedDocument {
   readonly data?: Record<string, unknown>;
   readonly mode?: AgentMode;
   readonly description?: string;
+  readonly disableModelInvocation?: boolean;
 }
 
 const OPENING = /^---[ \t]*\r?$/;
@@ -60,27 +61,52 @@ function describeYamlError(error: unknown): string {
   return "YAML inválido.";
 }
 
-function parseMapping(yaml: string): { data?: Record<string, unknown>; diagnostics: Diagnostic[] } {
-  if (yaml.trim().length === 0) {
-    return {
-      diagnostics: [errorDiagnostic("frontmatter_empty", "O frontmatter está vazio.")],
+export type FrontmatterYamlResult =
+  | { readonly ok: true; readonly data: Record<string, unknown> }
+  | {
+      readonly ok: false;
+      readonly reason: "empty" | "syntax" | "mapping";
+      readonly message?: string;
     };
+
+export function parseFrontmatterYaml(yaml: string): FrontmatterYamlResult {
+  if (yaml.trim().length === 0) {
+    return { ok: false, reason: "empty" };
   }
 
   let data: unknown;
   try {
     data = parseYaml(yaml, { merge: true, uniqueKeys: true });
   } catch (error) {
-    return { diagnostics: [errorDiagnostic("yaml_syntax", `YAML inválido: ${describeYamlError(error)}`)] };
+    return { ok: false, reason: "syntax", message: describeYamlError(error) };
   }
 
   if (!isPlainMapping(data)) {
+    return { ok: false, reason: "mapping" };
+  }
+
+  return { ok: true, data };
+}
+
+function parseMapping(yaml: string): { data?: Record<string, unknown>; diagnostics: Diagnostic[] } {
+  const result = parseFrontmatterYaml(yaml);
+  if (result.ok) {
+    return { data: result.data, diagnostics: [] };
+  }
+
+  if (result.reason === "empty") {
     return {
-      diagnostics: [errorDiagnostic("yaml_mapping", "O frontmatter deve ser um mapeamento YAML.")],
+      diagnostics: [errorDiagnostic("frontmatter_empty", "O frontmatter está vazio.")],
     };
   }
 
-  return { data, diagnostics: [] };
+  if (result.reason === "syntax") {
+    return { diagnostics: [errorDiagnostic("yaml_syntax", `YAML inválido: ${result.message}`)] };
+  }
+
+  return {
+    diagnostics: [errorDiagnostic("yaml_mapping", "O frontmatter deve ser um mapeamento YAML.")],
+  };
 }
 
 function checkAgentFieldTypes(data: Record<string, unknown>): Diagnostic[] {
@@ -134,6 +160,24 @@ function parseMode(data: Record<string, unknown>): { mode?: AgentMode; diagnosti
   return { mode: mode as AgentMode, diagnostics: [] };
 }
 
+function parseBooleanField(
+  data: Record<string, unknown>,
+  field: string,
+): { value?: boolean; diagnostics: Diagnostic[] } {
+  if (!(field in data) || data[field] === undefined) {
+    return { diagnostics: [] };
+  }
+
+  const value = data[field];
+  if (typeof value !== "boolean") {
+    return {
+      diagnostics: [errorDiagnostic("invalid_field_type", `O campo "${field}" deve ser booleano.`)],
+    };
+  }
+
+  return { value, diagnostics: [] };
+}
+
 function parseDescription(data: Record<string, unknown>, required: boolean): { description?: string; diagnostics: Diagnostic[] } {
   if (!("description" in data) || data.description === undefined) {
     return required
@@ -177,6 +221,7 @@ export function parseDocument(content: string, kind: ResourceKind): ParsedDocume
   const data = mapping.data;
   let mode: AgentMode | undefined;
   let description: string | undefined;
+  let disableModelInvocation: boolean | undefined;
 
   if (kind === "skill") {
     if (!("name" in data) || data.name === undefined) {
@@ -188,6 +233,10 @@ export function parseDocument(content: string, kind: ResourceKind): ParsedDocume
     const descriptionResult = parseDescription(data, true);
     diagnostics.push(...descriptionResult.diagnostics);
     description = descriptionResult.description;
+
+    const disableResult = parseBooleanField(data, "disable-model-invocation");
+    diagnostics.push(...disableResult.diagnostics);
+    disableModelInvocation = disableResult.value;
 
     if (description && description.length > SKILL_DESCRIPTION_MAX_LENGTH) {
       diagnostics.push(
@@ -229,7 +278,7 @@ export function parseDocument(content: string, kind: ResourceKind): ParsedDocume
     diagnostics.push(...checkAgentFieldTypes(data));
   }
 
-  return { diagnostics, data, mode, description };
+  return { diagnostics, data, mode, description, disableModelInvocation };
 }
 
 export function validateResourceName(name: string): Diagnostic | null {

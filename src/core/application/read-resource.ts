@@ -26,6 +26,7 @@ export interface ReadResourceResult {
     readonly name: string;
     readonly description?: string;
     readonly mode?: string;
+    readonly disableModelInvocation?: boolean;
     readonly version: string;
   };
   readonly raw: string;
@@ -66,6 +67,7 @@ export async function readResource(input: ReadResourceInput): Promise<ReadResour
       name: input.name,
       description: parsed.description,
       mode: parsed.mode,
+      disableModelInvocation: parsed.disableModelInvocation,
       version: file.version,
     },
     raw: file.content,

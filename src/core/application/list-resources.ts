@@ -71,6 +71,7 @@ export async function listResources(input: ListResourcesInput): Promise<ListReso
         name: file.target.name,
         description: parsed.description,
         mode: parsed.mode,
+        disableModelInvocation: parsed.disableModelInvocation,
         version: file.version,
         valid,
         diagnostics: parsed.diagnostics,

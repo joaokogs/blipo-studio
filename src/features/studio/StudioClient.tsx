@@ -2,11 +2,74 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResourceKind, Scope } from "@/core/domain";
+import {
+  readDisableModelInvocation,
+  writeDisableModelInvocation,
+  type DisableModelInvocationState,
+} from "@/providers/opencode/serializer";
 import { ApiError, studioApi, type Diagnostic, type ListedResource, type SessionInfo } from "./api";
 import { diffLines } from "./diff";
 
 const STORAGE_KEY = "blipo.token";
 const PROVIDER = "opencode";
+
+const DISABLE_MODEL_INVOCATION_OPTIONS = [
+  { value: "undefined", label: "Não definido" },
+  { value: "true", label: "true" },
+  { value: "false", label: "false" },
+] as const;
+
+const DISABLE_MODEL_INVOCATION_HINT =
+  "Campo opcional do frontmatter da skill: true indica impedir a invocação automática pelo modelo; false indica não solicitar essa restrição; não definido omite o campo. O Blipo Studio apenas lê e grava o valor; não afirma que o OpenCode aplica esse comportamento.";
+
+function triStateValue(value: boolean | undefined): string {
+  if (value === true) {
+    return "true";
+  }
+  if (value === false) {
+    return "false";
+  }
+  return "undefined";
+}
+
+function parseTriState(value: string): boolean | undefined {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return undefined;
+}
+
+function disableStateValue(state: DisableModelInvocationState): string {
+  if (state.kind === "boolean") {
+    return state.value ? "true" : "false";
+  }
+  if (state.kind === "absent") {
+    return "undefined";
+  }
+  if (state.kind === "locked") {
+    if (state.value === true) {
+      return "true";
+    }
+    if (state.value === false) {
+      return "false";
+    }
+    return "undefined";
+  }
+  return "invalid";
+}
+
+function disableLockedMessage(state: DisableModelInvocationState): string | null {
+  if (state.kind !== "locked") {
+    return null;
+  }
+  if (state.reason === "merge") {
+    return "Valor herdado de merge YAML (<<). Edite o RAW para alterar com segurança.";
+  }
+  return "Valor ancorado (&) referenciado por alias em outro campo. Edite o RAW para alterar com segurança.";
+}
 
 type Connection =
   | { status: "loading" }
@@ -60,6 +123,9 @@ export function StudioClient() {
   const [newScope, setNewScope] = useState<Scope>("repository");
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newDisableModelInvocation, setNewDisableModelInvocation] = useState<boolean | undefined>(
+    undefined,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
   const [globalConfirmed, setGlobalConfirmed] = useState(false);
@@ -179,6 +245,8 @@ export function StudioClient() {
   );
 
   const dirty = draft !== null && draft.content !== draft.original;
+  const draftDisableState =
+    draft && draft.kind === "skill" ? readDisableModelInvocation(draft.content) : null;
 
   async function openResource(resource: ListedResource) {
     if (!token || busy) {
@@ -244,6 +312,7 @@ export function StudioClient() {
         kind: newKind,
         name: newName,
         description: newDescription,
+        disableModelInvocation: newKind === "skill" ? newDisableModelInvocation : undefined,
       });
       setDraft({
         mode: "new",
@@ -626,6 +695,31 @@ export function StudioClient() {
             />
           </label>
         </div>
+        {newKind === "skill" ? (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-mono text-zinc-600 dark:text-zinc-400">
+              disable-model-invocation
+            </span>
+            <select
+              aria-label="disable-model-invocation do novo recurso"
+              className="max-w-xs rounded border border-zinc-300 bg-white px-2 py-1 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+              disabled={busy}
+              value={triStateValue(newDisableModelInvocation)}
+              onChange={(event) =>
+                setNewDisableModelInvocation(parseTriState(event.target.value))
+              }
+            >
+              {DISABLE_MODEL_INVOCATION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-zinc-500">
+              {DISABLE_MODEL_INVOCATION_HINT}
+            </span>
+          </label>
+        ) : null}
         <div>
           <button
             type="button"
@@ -691,6 +785,57 @@ export function StudioClient() {
               }
             />
           </label>
+
+          {draft.kind === "skill" ? (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-mono text-zinc-600 dark:text-zinc-400">
+                disable-model-invocation
+              </span>
+              <select
+                aria-label="disable-model-invocation da skill"
+                className="max-w-xs rounded border border-zinc-300 bg-white px-2 py-1 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+                disabled={
+                  busy ||
+                  draftDisableState?.kind === "invalid" ||
+                  draftDisableState?.kind === "locked"
+                }
+                value={draftDisableState ? disableStateValue(draftDisableState) : "undefined"}
+                onChange={(event) =>
+                  setDraft((current) =>
+                    current
+                      ? {
+                          ...current,
+                          content: writeDisableModelInvocation(
+                            current.content,
+                            parseTriState(event.target.value),
+                          ),
+                        }
+                      : current,
+                  )
+                }
+              >
+                {DISABLE_MODEL_INVOCATION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                {draftDisableState?.kind === "invalid" ? (
+                  <option value="invalid">Valor inválido — corrija o RAW</option>
+                ) : null}
+              </select>
+              {draftDisableState ? (
+                <span
+                  className={
+                    draftDisableState.kind === "locked"
+                      ? "text-xs text-amber-600 dark:text-amber-400"
+                      : "text-xs text-zinc-500"
+                  }
+                >
+                  {disableLockedMessage(draftDisableState) ?? DISABLE_MODEL_INVOCATION_HINT}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
 
           {draft.scope === "global" ? (
             <label className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">

@@ -39,7 +39,14 @@ const AGENT_KNOWN_FIELDS = [
   "textVerbosity",
 ];
 
-const SKILL_KNOWN_FIELDS = ["name", "description", "license", "compatibility", "metadata"];
+const SKILL_KNOWN_FIELDS = [
+  "name",
+  "description",
+  "license",
+  "compatibility",
+  "metadata",
+  "disable-model-invocation",
+];
 
 function buildCapabilities(): readonly Capability[] {
   const capabilities: Capability[] = [];
@@ -80,6 +87,7 @@ function parse(content: string, kind: ResourceKind): ParsedFrontmatter {
     data: parsed.data,
     mode: parsed.mode,
     description: parsed.description,
+    disableModelInvocation: parsed.disableModelInvocation,
   };
 }
 
@@ -148,6 +156,7 @@ function validate(input: ValidationInput): ValidationResult {
     diagnostics,
     mode: parsed.mode,
     description: parsed.description,
+    disableModelInvocation: parsed.disableModelInvocation,
   };
 }
 

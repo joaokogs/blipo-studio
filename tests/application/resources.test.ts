@@ -121,6 +121,72 @@ describe("casos de uso de recursos", () => {
     expect(list.resources.find((item) => item.name === "sem-mode-agent")?.mode).toBe("all");
   });
 
+  it("faz round-trip de disable-model-invocation em skills", async () => {
+    const { fileStore, adapter } = await makeContext();
+
+    const withTrue =
+      "---\nname: skill-true\ndescription: desc\ndisable-model-invocation: true\n---\ncorpo\n";
+    await createResource({
+      adapter,
+      fileStore,
+      scope: "repository",
+      kind: "skill",
+      name: "skill-true",
+      content: withTrue,
+    });
+    const readTrue = await readResource({
+      adapter,
+      fileStore,
+      scope: "repository",
+      kind: "skill",
+      name: "skill-true",
+    });
+    expect(readTrue.resource.disableModelInvocation).toBe(true);
+    expect(readTrue.raw).toBe(withTrue);
+
+    const withFalse =
+      "---\nname: skill-false\ndescription: desc\ndisable-model-invocation: false\n---\ncorpo\n";
+    await createResource({
+      adapter,
+      fileStore,
+      scope: "repository",
+      kind: "skill",
+      name: "skill-false",
+      content: withFalse,
+    });
+    const readFalse = await readResource({
+      adapter,
+      fileStore,
+      scope: "repository",
+      kind: "skill",
+      name: "skill-false",
+    });
+    expect(readFalse.resource.disableModelInvocation).toBe(false);
+
+    const absent = "---\nname: skill-absent\ndescription: desc\n---\ncorpo\n";
+    await createResource({
+      adapter,
+      fileStore,
+      scope: "repository",
+      kind: "skill",
+      name: "skill-absent",
+      content: absent,
+    });
+    const readAbsent = await readResource({
+      adapter,
+      fileStore,
+      scope: "repository",
+      kind: "skill",
+      name: "skill-absent",
+    });
+    expect(readAbsent.resource.disableModelInvocation).toBeUndefined();
+
+    const list = await listResources({ adapter, fileStore, scope: "repository" });
+    expect(list.resources.find((item) => item.name === "skill-false")?.disableModelInvocation).toBe(
+      false,
+    );
+  });
+
   it("remove skill sem tocar em outros arquivos", async () => {
     const { fileStore, adapter } = await makeContext();
     await createResource({

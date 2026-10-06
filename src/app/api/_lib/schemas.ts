@@ -47,6 +47,7 @@ export const templateRequestSchema = z.strictObject({
   name: nameSchema,
   description: z.string().min(1).max(SKILL_DESCRIPTION_MAX_LENGTH),
   mode: modeSchema.optional(),
+  disableModelInvocation: z.boolean().optional(),
 });
 
 export const mutateRequestSchema = z.discriminatedUnion("action", [

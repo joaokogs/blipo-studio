@@ -18,6 +18,7 @@ export const POST = handleRoute(async (request) => {
     name: body.name,
     description: body.description,
     mode: body.mode,
+    disableModelInvocation: body.disableModelInvocation,
   });
 
   return jsonResponse({ provider: adapter.providerId, content });

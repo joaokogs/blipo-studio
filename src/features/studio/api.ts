@@ -29,6 +29,7 @@ export interface ListedResource {
   name: string;
   description?: string;
   mode?: string;
+  disableModelInvocation?: boolean;
   version: string;
   valid: boolean;
   diagnostics: readonly Diagnostic[];
@@ -131,7 +132,14 @@ export const studioApi = {
   ) => request<ValidateResponse>(token, "/api/resources/validate", { method: "POST", body }),
   template: (
     token: string,
-    body: { provider: string; kind: string; name: string; description: string; mode?: string },
+    body: {
+      provider: string;
+      kind: string;
+      name: string;
+      description: string;
+      mode?: string;
+      disableModelInvocation?: boolean;
+    },
   ) => request<{ provider: string; content: string }>(token, "/api/resources/template", {
     method: "POST",
     body,

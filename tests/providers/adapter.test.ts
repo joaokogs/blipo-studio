@@ -59,6 +59,29 @@ describe("openCodeAdapter.validate", () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  it("aceita disable-model-invocation booleano sem avisar campo desconhecido", () => {
+    const content =
+      "---\nname: demo\ndescription: desc\ndisable-model-invocation: false\n---\ncorpo\n";
+    const result = openCodeAdapter.validate({
+      scope: "repository",
+      kind: "skill",
+      name: "demo",
+      content,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.disableModelInvocation).toBe(false);
+    expect(result.diagnostics.some((d) => d.code === "unknown_fields_preserved")).toBe(false);
+  });
+
+  it("rejeita disable-model-invocation não booleano", () => {
+    const errors = errorMessages(
+      '---\nname: demo\ndescription: desc\ndisable-model-invocation: "true"\n---\n',
+      "skill",
+      "demo",
+    );
+    expect(errors.some((diagnostic) => diagnostic.code === "invalid_field_type")).toBe(true);
+  });
 });
 
 describe("openCodeAdapter.planChanges", () => {
@@ -149,6 +172,29 @@ describe("buildTemplate", () => {
       content,
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("serializa disable-model-invocation true e false na skill", () => {
+    const enabled = buildTemplate({
+      kind: "skill",
+      name: "demo",
+      description: "Demo",
+      disableModelInvocation: true,
+    });
+    expect(enabled).toContain("disable-model-invocation: true");
+
+    const disabled = buildTemplate({
+      kind: "skill",
+      name: "demo",
+      description: "Demo",
+      disableModelInvocation: false,
+    });
+    expect(disabled).toContain("disable-model-invocation: false");
+  });
+
+  it("omite disable-model-invocation quando não definido", () => {
+    const content = buildTemplate({ kind: "skill", name: "demo", description: "Demo" });
+    expect(content).not.toContain("disable-model-invocation");
   });
 
   it("preserva asset de fixture intacto", async () => {

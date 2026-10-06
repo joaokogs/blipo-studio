@@ -16,6 +16,7 @@ export interface Resource {
   readonly name: string;
   readonly description?: string;
   readonly mode?: AgentMode;
+  readonly disableModelInvocation?: boolean;
   readonly version?: string;
 }
 

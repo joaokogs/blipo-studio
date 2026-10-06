@@ -86,4 +86,35 @@ describe("parseDocument — skills", () => {
     expect(parsed.description).toContain("releases");
     expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   });
+
+  it("lê disable-model-invocation true", () => {
+    const parsed = parseDocument(
+      "---\nname: demo\ndescription: desc\ndisable-model-invocation: true\n---\ncorpo",
+      "skill",
+    );
+    expect(parsed.disableModelInvocation).toBe(true);
+    expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+  });
+
+  it("mantém disable-model-invocation false sem perder por truthiness", () => {
+    const parsed = parseDocument(
+      "---\nname: demo\ndescription: desc\ndisable-model-invocation: false\n---\ncorpo",
+      "skill",
+    );
+    expect(parsed.disableModelInvocation).toBe(false);
+    expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+  });
+
+  it("trata disable-model-invocation ausente como indefinido", () => {
+    const parsed = parseDocument("---\nname: demo\ndescription: desc\n---\ncorpo", "skill");
+    expect(parsed.disableModelInvocation).toBeUndefined();
+  });
+
+  it("rejeita disable-model-invocation com string em vez de booleano", () => {
+    const parsed = parseDocument(
+      '---\nname: demo\ndescription: desc\ndisable-model-invocation: "true"\n---\ncorpo',
+      "skill",
+    );
+    expect(hasErrorCode(parsed.diagnostics, "invalid_field_type")).toBe(true);
+  });
 });

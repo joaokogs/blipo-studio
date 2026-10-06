@@ -62,6 +62,43 @@ test("cria, edita, trata conflito e remove um agente sem tocar config real", asy
   await expect(page.getByText(/Recurso removido/)).toBeVisible();
 });
 
+test("skill: cria e edita disable-model-invocation preservando false", async ({ page, request }) => {
+  await page.goto(`${baseURL}/#token=${token}`);
+  await expect(page.getByText("Sessão ativa")).toBeVisible();
+
+  const name = "e2e-skill";
+  await page.getByLabel("Tipo do novo recurso").selectOption("skill");
+  await page.getByLabel("Nome (a-z, 0-9, hífen)").fill(name);
+  await page.getByLabel("Descrição").fill("Skill criada no E2E");
+  await page.getByLabel("disable-model-invocation do novo recurso").selectOption("false");
+  await page.getByRole("button", { name: "Gerar template" }).click();
+
+  const editor = page.getByLabel("Conteúdo RAW do recurso");
+  await expect(editor).toHaveValue(/disable-model-invocation: false/);
+  await page.getByRole("button", { name: "Salvar (criar)" }).click();
+  await expect(page.getByText(/Recurso criado/)).toBeVisible();
+
+  const readResponse = await request.post(`${baseURL}/api/resources/read`, {
+    headers: { "x-blipo-token": token, origin: baseURL },
+    data: { provider: "opencode", scope: "repository", kind: "skill", name },
+  });
+  expect(readResponse.ok()).toBe(true);
+  const read = await readResponse.json();
+  expect(read.resource.disableModelInvocation).toBe(false);
+
+  await page.getByLabel("disable-model-invocation da skill").selectOption("true");
+  await expect(editor).toHaveValue(/disable-model-invocation: true/);
+  await page.getByRole("button", { name: "Salvar (atualizar)" }).click();
+  await expect(page.getByText(/Recurso atualizado/)).toBeVisible();
+
+  const updatedResponse = await request.post(`${baseURL}/api/resources/read`, {
+    headers: { "x-blipo-token": token, origin: baseURL },
+    data: { provider: "opencode", scope: "repository", kind: "skill", name },
+  });
+  const updated = await updatedResponse.json();
+  expect(updated.resource.disableModelInvocation).toBe(true);
+});
+
 test("cancelar novo template preserva o rascunho atual", async ({ page }) => {
   await page.goto(`${baseURL}/#token=${token}`);
   await expect(page.getByText("Sessão ativa")).toBeVisible();

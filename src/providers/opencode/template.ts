@@ -5,6 +5,7 @@ export interface TemplateInput {
   readonly name: string;
   readonly description: string;
   readonly mode?: AgentMode;
+  readonly disableModelInvocation?: boolean;
 }
 
 function agentFrontmatter(mode: AgentMode | undefined): string {
@@ -19,15 +20,14 @@ function agentFrontmatter(mode: AgentMode | undefined): string {
 
 export function buildTemplate(input: TemplateInput): string {
   if (input.kind === "skill") {
-    return [
-      "---",
-      `name: ${input.name}`,
-      `description: ${input.description}`,
-      "---",
-      "",
-      `Descreva aqui o que a skill ${input.name} faz e quando deve ser usada.`,
-      "",
-    ].join("\n");
+    const frontmatter = ["---", `name: ${input.name}`, `description: ${input.description}`];
+    if (input.disableModelInvocation !== undefined) {
+      frontmatter.push(
+        `disable-model-invocation: ${input.disableModelInvocation ? "true" : "false"}`,
+      );
+    }
+    frontmatter.push("---", "", `Descreva aqui o que a skill ${input.name} faz e quando deve ser usada.`, "");
+    return frontmatter.join("\n");
   }
 
   const mode =

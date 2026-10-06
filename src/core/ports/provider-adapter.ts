@@ -28,6 +28,7 @@ export interface ValidationResult {
   readonly diagnostics: readonly Diagnostic[];
   readonly mode?: AgentMode;
   readonly description?: string;
+  readonly disableModelInvocation?: boolean;
 }
 
 export interface ParsedFrontmatter {
@@ -35,6 +36,7 @@ export interface ParsedFrontmatter {
   readonly data?: Record<string, unknown>;
   readonly mode?: AgentMode;
   readonly description?: string;
+  readonly disableModelInvocation?: boolean;
 }
 
 export interface ResourceChangeRequest {
